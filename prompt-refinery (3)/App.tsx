@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Zap, Trash2, Copy, Check, History as HistoryIcon, LayoutDashboard, Cpu, 
   ShieldCheck, ArrowRightLeft, Info, AlertTriangle, Code, FileUp, 
-  Download, Layers, FileText, CheckCircle2, TrendingDown, DollarSign, Clock
+  Download, Layers, FileText, CheckCircle2, TrendingDown, DollarSign, Clock, Search
 } from 'lucide-react';
 import { optimizePrompt, generateMarketDocument } from './services/llmService';
 import { 
@@ -16,12 +16,18 @@ import { AnalysisChart } from './components/AnalysisChart';
 import { BatchDashboard } from './components/BatchDashboard';
 import { MarketSheet } from './components/MarketSheet';
 import { getSemanticDiagnostics } from './utils/semantic';
+import { ToastContainer } from './components/Toast';
+import { Onboarding } from './components/Onboarding';
+import { useToast } from './hooks/useToast';
 
 import { encode } from 'gpt-tokenizer';
 
 const App: React.FC = () => {
+  const toast = useToast();
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const [view, setView] = useState<'single' | 'batch' | 'business' | 'settings'>('single');
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => localStorage.getItem('draft_prompt') || '');
+  const [historySearch, setHistorySearch] = useState('');
   const [level, setLevel] = useState<CompressionLevel>(CompressionLevel.MEDIUM);
   const [format, setFormat] = useState<OutputFormat>(OutputFormat.XML);
   const [strategy, setStrategy] = useState<ModelStrategy>(ModelStrategy.UNIVERSAL);
@@ -91,11 +97,22 @@ const App: React.FC = () => {
     localStorage.setItem('prompt_refinery_history_v2', JSON.stringify(history.slice(0, 50)));
   }, [history]);
 
+  // Auto-save draft prompt
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (input.trim()) {
+        localStorage.setItem('draft_prompt', input);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [input]);
+
   const copyToClipboard = (text: string) => {
     if (!text) return;
     navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      toast.success('Copied to clipboard');
+    }).catch(() => {
+      toast.error('Failed to copy');
     });
   };
 
@@ -143,7 +160,7 @@ const App: React.FC = () => {
   const handleOptimize = async () => {
     const apiKey = getActiveApiKey();
     if (!apiKey) {
-      setError(`Please configure an API key for ${provider}`);
+      toast.error(`Please configure an API key for ${provider}`);
       return;
     }
     
@@ -172,8 +189,11 @@ const App: React.FC = () => {
 
       setResult(res);
       setHistory(prev => [newHistoryItem, ...prev]);
+      toast.success(`Optimized! ${res.savingsPercentage.toFixed(1)}% tokens saved`);
     } catch (err: any) {
-      setError(err.message || 'Optimization failed.');
+      const errorMsg = err.message || 'Optimization failed. Please try again.';
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -192,7 +212,10 @@ const App: React.FC = () => {
           original: typeof p === 'string' ? p : JSON.stringify(p),
           status: 'pending'
         })));
-      } catch (err) { setError("Failed to parse file."); }
+        toast.success(`Loaded ${prompts.length} prompts`);
+      } catch (err) { 
+        toast.error("Failed to parse file. Ensure valid JSON or newline-separated text.");
+      }
     };
     reader.readAsText(file);
   };
@@ -200,12 +223,13 @@ const App: React.FC = () => {
   const runBatchRefinery = async () => {
     const apiKey = getActiveApiKey();
     if (!apiKey) {
-      setError(`Please configure an API key for ${provider}`);
+      toast.error(`Please configure an API key for ${provider}`);
       return;
     }
     
     if (batchLoading) return;
     setBatchLoading(true);
+    toast.info(`Processing ${batchItems.filter(i => i.status === 'pending').length} prompts...`);
     for (const item of batchItems.filter(i => i.status === 'pending')) {
       setBatchItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'processing' } : i));
       try {
@@ -221,10 +245,14 @@ const App: React.FC = () => {
       await new Promise(r => setTimeout(r, 100));
     }
     setBatchLoading(false);
+    const completed = batchItems.filter(i => i.status === 'completed').length;
+    toast.success(`Batch complete! ${completed} prompts optimized`);
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-20 selection:bg-indigo-500/30">
+      <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+      {showOnboarding && <Onboarding onClose={() => setShowOnboarding(false)} />}
       {/* Dynamic Header with Stats */}
       <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -480,20 +508,44 @@ const App: React.FC = () => {
               <div className="lg:col-span-4 space-y-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
                   <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Clock className="w-3 h-3" /> Audit Library</h3>
+                  <div className="relative mb-4">
+                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Search history..."
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 text-xs text-slate-300 rounded-lg p-2 pl-9 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    />
+                  </div>
                   <div className="space-y-3">
-                    {history.slice(0, 10).map((item) => (
-                      <div key={item.id} onClick={() => { setInput(item.originalText); setResult(item); }} className="p-3 bg-slate-950 border border-slate-800 rounded-xl hover:border-blue-500/50 transition-all cursor-pointer group">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[9px] px-1.5 py-0.5 bg-blue-600/20 text-blue-400 rounded font-bold">V{item.version}</span>
-                          <span className="text-[8px] text-slate-600">{new Date(item.timestamp).toLocaleTimeString()}</span>
+                    {history
+                      .filter(item => 
+                        item.originalText.toLowerCase().includes(historySearch.toLowerCase()) ||
+                        item.strategy.toLowerCase().includes(historySearch.toLowerCase())
+                      )
+                      .slice(0, 10)
+                      .map((item) => (
+                        <div key={item.id} onClick={() => { setInput(item.originalText); setResult(item); }} className="p-3 bg-slate-950 border border-slate-800 rounded-xl hover:border-blue-500/50 transition-all cursor-pointer group">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[9px] px-1.5 py-0.5 bg-blue-600/20 text-blue-400 rounded font-bold">V{item.version}</span>
+                            <span className="text-[8px] text-slate-600">{new Date(item.timestamp).toLocaleTimeString()}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 line-clamp-2 font-mono leading-relaxed mb-2">{item.originalText}</p>
+                          <div className="flex justify-between items-center text-[9px] font-bold">
+                            <span className="text-green-500">-{item.savingsPercentage.toFixed(0)}% TOKENS</span>
+                            <span className="text-slate-500">{item.strategy}</span>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-slate-400 line-clamp-2 font-mono leading-relaxed mb-2">{item.originalText}</p>
-                        <div className="flex justify-between items-center text-[9px] font-bold">
-                          <span className="text-green-500">-{item.savingsPercentage.toFixed(0)}% TOKENS</span>
-                          <span className="text-slate-500">{item.strategy}</span>
-                        </div>
+                      ))}
+                    {history.filter(item => 
+                      item.originalText.toLowerCase().includes(historySearch.toLowerCase()) ||
+                      item.strategy.toLowerCase().includes(historySearch.toLowerCase())
+                    ).length === 0 && (
+                      <div className="text-center py-6 text-slate-500 text-[11px]">
+                        {history.length === 0 ? 'No history yet. Optimize a prompt to get started.' : 'No results found.'}
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 
