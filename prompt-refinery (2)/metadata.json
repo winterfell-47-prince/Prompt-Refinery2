@@ -1,5 +1,0 @@
-{
-  "name": "Prompt Refinery",
-  "description": "A semantic optimization engine that re-sequences and compresses AI prompts to slash token costs while improving model performance.",
-  "requestFramePermissions": []
-}
