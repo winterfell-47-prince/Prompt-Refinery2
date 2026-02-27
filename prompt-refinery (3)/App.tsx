@@ -21,6 +21,7 @@ import { Onboarding } from './components/Onboarding';
 import { useToast } from './hooks/useToast';
 
 import { encode } from 'gpt-tokenizer';
+import { getSecureApiKey, setSecureApiKey } from './utils/secureStorage';
 
 const App: React.FC = () => {
   const toast = useToast();
@@ -34,10 +35,10 @@ const App: React.FC = () => {
   const [provider, setProvider] = useState<LLMProvider>(LLMProvider.GOOGLE_GEMINI);
   const [useBetaModel, setUseBetaModel] = useState(false);
   
-  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_key') || '');
-  const [openaiKey, setOpenaiKey] = useState(localStorage.getItem('openai_key') || '');
-  const [anthropicKey, setAnthropicKey] = useState(localStorage.getItem('anthropic_key') || '');
-  const [deepseekKey, setDeepseekKey] = useState(localStorage.getItem('deepseek_key') || '');
+  const [geminiKey, setGeminiKey] = useState(getSecureApiKey('gemini_key'));
+  const [openaiKey, setOpenaiKey] = useState(getSecureApiKey('openai_key'));
+  const [anthropicKey, setAnthropicKey] = useState(getSecureApiKey('anthropic_key'));
+  const [deepseekKey, setDeepseekKey] = useState(getSecureApiKey('deepseek_key'));
   
   const [customConfig, setCustomConfig] = useState<CustomAPIConfig>({
     endpoint: localStorage.getItem('custom_endpoint') || '',
@@ -89,7 +90,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const saved = localStorage.getItem('prompt_refinery_history_v2');
     if (saved) {
-      try { setHistory(JSON.parse(saved)); } catch (e) { console.error("History parse failed"); }
+      try { setHistory(JSON.parse(saved)); } catch (e) { /* History parse failed */ }
     }
   }, []);
 
@@ -117,19 +118,19 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (geminiKey) localStorage.setItem('gemini_key', geminiKey);
+    if (geminiKey) setSecureApiKey('gemini_key', geminiKey);
   }, [geminiKey]);
 
   useEffect(() => {
-    if (openaiKey) localStorage.setItem('openai_key', openaiKey);
+    if (openaiKey) setSecureApiKey('openai_key', openaiKey);
   }, [openaiKey]);
 
   useEffect(() => {
-    if (anthropicKey) localStorage.setItem('anthropic_key', anthropicKey);
+    if (anthropicKey) setSecureApiKey('anthropic_key', anthropicKey);
   }, [anthropicKey]);
 
   useEffect(() => {
-    if (deepseekKey) localStorage.setItem('deepseek_key', deepseekKey);
+    if (deepseekKey) setSecureApiKey('deepseek_key', deepseekKey);
   }, [deepseekKey]);
 
   useEffect(() => {

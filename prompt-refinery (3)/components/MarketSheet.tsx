@@ -40,9 +40,9 @@ export const MarketSheet: React.FC<{ apiKey: string; provider: LLMProvider }> = 
     try {
       const doc = await generateMarketDocument(targetCompany, industry, provider, apiKey);
       setGeneratedDoc(doc);
-    } catch (error) {
-      console.error(error);
-    } finally {
+      } catch (error) {
+        // Error handled by toast notification
+      } finally {
       setIsGenerating(false);
     }
   };
